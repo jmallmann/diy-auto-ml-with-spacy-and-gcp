@@ -12,6 +12,7 @@ Compatible with: spaCy v2.0.0+
 from __future__ import unicode_literals, print_function
 import plac
 import random
+import warnings
 from pathlib import Path
 import csv
 from collections import defaultdict
