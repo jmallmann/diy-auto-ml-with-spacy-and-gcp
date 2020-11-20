@@ -10,9 +10,9 @@ const { GoogleAuth } = require('google-auth-library');
 
 let auth;
 
-const projectID = "YOUR_PROJECT_ID"
-const repositoryName = "github_your-name_diy-auto-ml-with-spacy-and-gcp"
-const region = "europe-west1" // limited to: asia-east1, europe-west1, us-central1, asia-northeast1, europe-north1, europe-west4, us-east1, us-east4, us-west1
+const projectID = "automl-a84ae"
+const repositoryName = "github_jmallmann_diy-auto-ml-with-spacy-and-gcp"
+const region = "us-central1" // limited to: asia-east1, europe-west1, us-central1, asia-northeast1, europe-north1, europe-west4, us-east1, us-east4, us-west1
 
 const runtimeOpts = {
     timeoutSeconds: 300,

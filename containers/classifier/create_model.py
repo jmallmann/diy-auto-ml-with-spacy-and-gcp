@@ -22,6 +22,12 @@ from spacy.util import minibatch, compounding
 
 output_dir_name = "./model"
 
+# training data
+TRAIN_DATA = [
+    ("Who is Shaka Khan?", {"entities": [(7, 17, "PERSON")]}),
+    ("I like London and Berlin.", {"entities": [(7, 13, "LOC"), (18, 24, "LOC")]}),
+]
+
 @plac.annotations(
     input_file=("File path to dataset", 'positional', None, str),
     n_iter=("Number of training iterations", "option", "n", int),
@@ -36,67 +42,123 @@ def main(input_file, n_iter=14, n_split=0.8):
 
     # add the text classifier to the pipeline if it doesn't exist
     # nlp.create_pipe works for built-ins that are registered with spaCy
-    if "textcat" not in nlp.pipe_names:
-        textcat = nlp.create_pipe(
-            "textcat", config={"exclusive_classes": True}
-        )
-        nlp.add_pipe(textcat, last=True)
+    #if "textcat" not in nlp.pipe_names:
+    #    textcat = nlp.create_pipe(
+    #       "textcat", config={"exclusive_classes": True}
+    #    )
+    #   nlp.add_pipe(textcat, last=True)
     # otherwise, get it, so we can add labels to it
+    #else:
+    #    textcat = nlp.get_pipe("textcat")
+
+    if "ner" not in nlp.pipe_names:
+        ner = nlp.create_pipe("ner")
+        nlp.add_pipe(ner, last=True)
+    # otherwise, get it so we can add labels
     else:
-        textcat = nlp.get_pipe("textcat")
+        ner = nlp.get_pipe("ner")
 
-    print("Loading data...")
-    (train_texts, train_cats), (dev_texts, dev_cats), largestLabel, labels = load_data(input_file, splitRatio=n_split)
-
-    # add labels to text classifier
-    for label in labels:
-        textcat.add_label(label.upper())
-
-    print(
-        "{} training, {} evaluation".format(
-            len(train_texts), len(dev_texts)
-        )
-    )
-    train_data = list(zip(train_texts, [{"cats": cats} for cats in train_cats]))
+    # add labels
+    for _, annotations in TRAIN_DATA:
+        for ent in annotations.get("entities"):
+            ner.add_label(ent[2])
 
     # get names of other pipes to disable them during training
-    pipe_exceptions = ["textcat", "trf_wordpiecer", "trf_tok2vec"]
+    pipe_exceptions = ["ner", "trf_wordpiecer", "trf_tok2vec"]
     other_pipes = [pipe for pipe in nlp.pipe_names if pipe not in pipe_exceptions]
-    with nlp.disable_pipes(*other_pipes):  # only train textcat
-        optimizer = nlp.begin_training()
-        print("Training the model...")
-        print("{:^5}\t{:^5}\t{:^5}\t{:^5}".format("LOSS", "P", "R", "F"))
-        batch_sizes = compounding(4.0, 32.0, 1.001)
-        for _ in range(n_iter):
+    # only train NER
+    with nlp.disable_pipes(*other_pipes), warnings.catch_warnings():
+        # show warnings for misaligned entity spans once
+        warnings.filterwarnings("once", category=UserWarning, module='spacy')
+
+        # reset and initialize the weights randomly – but only if we're
+        # training a new model
+        ##if model is None:
+        ##    nlp.begin_training()
+        for itn in range(n_iter):
+            random.shuffle(TRAIN_DATA)
             losses = {}
             # batch up the examples using spaCy's minibatch
-            random.shuffle(train_data)
-            batches = minibatch(train_data, size=batch_sizes)
+            batches = minibatch(TRAIN_DATA, size=compounding(4.0, 32.0, 1.001))
             for batch in batches:
                 texts, annotations = zip(*batch)
-                nlp.update(texts, annotations, sgd=optimizer, drop=0.2, losses=losses)
-            with textcat.model.use_params(optimizer.averages):
-                # evaluate on the dev data split off in load_data()
-                scores = evaluate(nlp.tokenizer, textcat, dev_texts, dev_cats, largestLabel.upper())
-                print(
-                    "{0:.3f}\t{1:.3f}\t{2:.3f}\t{3:.3f}".format(  # print a simple table
-                        losses["textcat"],
-                        scores["textcat_p"],
-                        scores["textcat_r"],
-                        scores["textcat_f"],
-                    )
+                nlp.update(
+                    texts,  # batch of texts
+                    annotations,  # batch of annotations
+                    drop=0.5,  # dropout - make it harder to memorise data
+                    losses=losses,
                 )
-                with open('./stats.json', 'w') as fp:
-                    stats = {
-                        "predict": "{0:.3f}".format(scores["textcat_p"]),
-                        "recall": "{0:.3f}".format(scores["textcat_r"]),
-                        "fvalue": "{0:.3f}".format(scores["textcat_f"]),
-                    }
-                    json.dump(stats, fp)
+            print("Losses", losses)
 
-    with nlp.use_params(optimizer.averages):
+    # test the trained model
+    for text, _ in TRAIN_DATA:
+        doc = nlp(text)
+        print("Entities", [(ent.text, ent.label_) for ent in doc.ents])
+        print("Tokens", [(t.text, t.ent_type_, t.ent_iob) for t in doc])
+
+    ########
+
+    #print("Loading data...")
+    #(train_texts, train_cats), (dev_texts, dev_cats), largestLabel, labels = load_data(input_file, splitRatio=n_split)
+
+    # add labels to text classifier
+    #for label in labels:
+    #   textcat.add_label(label.upper())
+
+    #print(
+    #    "{} training, {} evaluation".format(
+    #        len(train_texts), len(dev_texts)
+    #    )
+    #)
+    #train_data = list(zip(train_texts, [{"cats": cats} for cats in train_cats]))
+
+    # get names of other pipes to disable them during training
+    #pipe_exceptions = ["textcat", "trf_wordpiecer", "trf_tok2vec"]
+    #other_pipes = [pipe for pipe in nlp.pipe_names if pipe not in pipe_exceptions]
+    #with nlp.disable_pipes(*other_pipes):  # only train textcat
+    #    optimizer = nlp.begin_training()
+    #    print("Training the model...")
+    #    print("{:^5}\t{:^5}\t{:^5}\t{:^5}".format("LOSS", "P", "R", "F"))
+    #    batch_sizes = compounding(4.0, 32.0, 1.001)
+    #    for _ in range(n_iter):
+    #        losses = {}
+            # batch up the examples using spaCy's minibatch
+    #        random.shuffle(train_data)
+    #        batches = minibatch(train_data, size=batch_sizes)
+    #        for batch in batches:
+    #            texts, annotations = zip(*batch)
+    #            nlp.update(texts, annotations, sgd=optimizer, drop=0.2, losses=losses)
+    #        with textcat.model.use_params(optimizer.averages):
+                # evaluate on the dev data split off in load_data()
+    #            scores = evaluate(nlp.tokenizer, textcat, dev_texts, dev_cats, largestLabel.upper())
+    #            print(
+    #                "{0:.3f}\t{1:.3f}\t{2:.3f}\t{3:.3f}".format(  # print a simple table
+    #                    losses["textcat"],
+    #                    scores["textcat_p"],
+    #                    scores["textcat_r"],
+    #                   scores["textcat_f"],
+    #                )
+    #            )
+    #            with open('./stats.json', 'w') as fp:
+    #                stats = {
+    #                    "predict": "{0:.3f}".format(scores["textcat_p"]),
+    #                    "recall": "{0:.3f}".format(scores["textcat_r"]),
+    #                    "fvalue": "{0:.3f}".format(scores["textcat_f"]),
+    #                }
+    #                json.dump(stats, fp)
+
+    # with nlp.use_params(optimizer.averages):
         nlp.to_disk(output_dir)
     print("Saved model to", output_dir)
+
+    #test saved model
+    print("Loading from", output_dir)
+    nlp2 = spacy.load(output_dir)
+    for text, _ in TRAIN_DATA:
+        doc = nlp2(text)
+        print("Entities", [(ent.text, ent.label_) for ent in doc.ents])
+        print("Tokens", [(t.text, t.ent_type_, t.ent_iob) for t in doc])
+    
 
 
 def load_data(input_file, splitRatio=0.8):

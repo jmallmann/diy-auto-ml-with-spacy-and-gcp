@@ -38,7 +38,8 @@ export class Upload extends Component {
 
     fileChange = (e) => {
         if (e.target.files[0] && e.target.files[0].name) {
-            let wrongType = e.target.files[0].type !== "text/csv"
+            // let wrongType = e.target.files[0].type !== "csv"
+            let wrongType = false
             let tooLarge = e.target.files[0].size > 50000000
             this.setState({
                 fileName: e.target.files[0].name,
@@ -64,7 +65,7 @@ export class Upload extends Component {
         const docRef = db.collection("datasets").doc()
 
         var metadata = {
-            contentType: 'text/csv',
+            contentType: 'csv',
             customMetadata: {
                 'owner': this.state.user.email,
                 'name': this.state.name,
