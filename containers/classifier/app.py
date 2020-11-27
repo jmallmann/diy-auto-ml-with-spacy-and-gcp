@@ -35,7 +35,7 @@ def classify():
         load_model()    
     payload = str(req_data['payload'])
     doc = nlp(payload)
-    return '{}\n'.format(doc.ents)
+    return json.dumps(doc.ents)
 
 if __name__ == "__main__":
     app.run(debug=True,host='0.0.0.0',port=int(os.environ.get('PORT', 8080)))
