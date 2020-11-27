@@ -37,7 +37,7 @@ def classify():
         load_model()    
     payload = str(req_data['payload'])
     doc = nlp(payload)
-    return jsonify(doc.ents)
+    return jsonify(doc.to_json())
 
 if __name__ == "__main__":
     app.run(debug=True,host='0.0.0.0',port=int(os.environ.get('PORT', 8080)))
