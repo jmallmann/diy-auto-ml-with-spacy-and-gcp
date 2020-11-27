@@ -1,5 +1,7 @@
 import os
 
+from flask.json import jsonify
+
 import spacy
 from flask import Flask
 from flask import request
@@ -35,7 +37,7 @@ def classify():
         load_model()    
     payload = str(req_data['payload'])
     doc = nlp(payload)
-    return json.dumps(doc.ents)
+    return jsonify(doc.ents)
 
 if __name__ == "__main__":
     app.run(debug=True,host='0.0.0.0',port=int(os.environ.get('PORT', 8080)))
